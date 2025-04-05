@@ -17,6 +17,7 @@ library(ggplot2)
 library(survminer)
 library(data.table)
 library(joineRML)
+library(tidyr)
 ```
 
 
@@ -56,6 +57,21 @@ barplot(prop.table(table(pbc2_constants$status2)))
 ```
 ## Quantitative variables
 ```{r}
+plot(pbc2$year, pbc2$serBilir)
+abline(lm(pbc2$serBilir ~ pbc2$year), col = "red")
+plot(pbc2$year, pbc2$serChol)
+abline(lm(pbc2$serChol ~ pbc2$year), col = "red")
+plot(pbc2$year, pbc2$alkaline)
+abline(lm(pbc2$alkaline ~ pbc2$year), col = "red")
+plot(pbc2$year, pbc2$SGOT)
+abline(lm(pbc2$SGOT ~ pbc2$year), col = "red")
+plot(pbc2$year, pbc2$platelets)
+abline(lm(pbc2$platelets ~ pbc2$year), col = "red")
+plot(pbc2$year, pbc2$prothrombin)
+abline(lm(pbc2$prothrombin ~ pbc2$year), col = "red")
+```
+
+```{r}
 ggplot(pbc2[c('id','serBilir','year')], aes(year, serBilir, group = id, color = id)) + 
   geom_point() + 
   geom_line() +
@@ -80,9 +96,8 @@ ggplot(pbc2[c('id','prothrombin','year')], aes(year, prothrombin, group = id, co
   geom_point() + 
   geom_line() +
   theme(legend.position = "none")
-ggplot(pbc2[c('id','histologic','year')], aes(year, histologic, group = id, color = id)) + 
-  geom_point() + 
-  geom_line() +
-  theme(legend.position = "none")
 ```
 
+###PART B
+##a)
+Status2, 
