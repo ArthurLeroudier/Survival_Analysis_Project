@@ -100,4 +100,32 @@ ggplot(pbc2[c('id','prothrombin','year')], aes(year, prothrombin, group = id, co
 
 ###PART B
 ##a)
-Status2, 
+Since edema levels are used both in the original Mayo model(1) and the updated model of Murtaugh et al., we chose it as the categorical variable
+```{r}
+surv_edema <- survfit(Surv(year,status2)~edema, data=pbc2)
+summary(surv_edema)
+ggsurvplot(surv_edema)
+```
+##b)
+```{r}
+print(surv_edema)
+quantile(surv_edema, prob=0.5)
+quantile(surv_edema, prob=0.25)
+quantile(surv_edema, prob=0.75)
+```
+##c)
+```{r}
+survdiff(Surv(year,status2)~edema, data=pbc2) #log ranks
+survdiff(Surv(year,status2)~edema, data=pbc2, rho=1) #peto-peto weights
+```
+
+##d)
+WARNING: The Kaplan Meier curves are crossing each other (see question a), so the Cox model is likely not satisfied
+```{r}
+cox_edema <- coxph(Surv(year,status2)~edema, data=pbc2)
+summary(cox_edema)
+```
+
+(1) Dickson ER, Grambsch PM, Fleming TR, Fisher LD, Langworthy A. Prognosis in primary biliary cirrhosis: model for decision making. Hepatology. 1989 Jul;10(1):1-7. doi: 10.1002/hep.1840100102. PMID: 2737595.
+
+(2) Murtaugh PA, Dickson ER, Van Dam GM, Malinchoc M, Grambsch PM, Langworthy AL, Gips CH. Primary biliary cirrhosis: prediction of short-term survival based on repeated patient visits. Hepatology. 1994 Jul;20(1 Pt 1):126-34. doi: 10.1016/0270-9139(94)90144-9. PMID: 8020881.
