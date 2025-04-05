@@ -1,0 +1,88 @@
+---
+title: "Restitution"
+output: html_document
+date: "2025-04-05"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+###IMPORTS
+```{r}
+library(KMsurv)
+library(survival)
+library(ggplot2)
+library(survminer)
+library(data.table)
+library(joineRML)
+```
+
+
+```{r}
+library(tidyr)
+```
+
+#setup
+```{r}
+set.seed(0)
+data(pbc2)
+```
+
+###PART A
+
+##Missing Values
+```{r}
+colSums(is.na(pbc2))
+missing_row <- data.frame(id= pbc2$id, missing = rowSums(is.na(pbc2)))
+missing_row <-missing_row[missing_row$missing>0,]
+```
+
+##Constant variables
+```{r}
+dif_values <- data.table(pbc2)[, lapply(.SD, function(x) length(unique(x))), by=id]
+#^for each individual we check how many different values for each variable
+check_constants <- colSums(dif_values[,!'id'])
+check_constants #if the value is 312, the variable is constant for a given individual
+#constant variables are: years, status, drug, age, sex, status2
+pbc2_constants <- unique(pbc2[,c('years', 'status', 'drug', 'age', 'sex', 'status2')])
+hist(pbc2$years)
+barplot(prop.table(table(pbc2_constants$status)))
+barplot(prop.table(table(pbc2_constants$drug)))
+hist(pbc2$age)
+barplot(prop.table(table(pbc2_constants$sex)))
+barplot(prop.table(table(pbc2_constants$status2)))
+```
+## Quantitative variables
+```{r}
+ggplot(pbc2[c('id','serBilir','year')], aes(year, serBilir, group = id, color = id)) + 
+  geom_point() + 
+  geom_line() +
+  theme(legend.position = "none")
+ggplot(pbc2[c('id','serChol','year')], aes(year, serChol, group = id, color = id)) + 
+  geom_point() + 
+  geom_line() +
+  theme(legend.position = "none")
+ggplot(pbc2[c('id','alkaline','year')], aes(year, alkaline, group = id, color = id)) + 
+  geom_point() + 
+  geom_line() +
+  theme(legend.position = "none")
+ggplot(pbc2[c('id','SGOT','year')], aes(year, SGOT, group = id, color = id)) + 
+  geom_point() + 
+  geom_line() +
+  theme(legend.position = "none")
+ggplot(pbc2[c('id','platelets','year')], aes(year, platelets, group = id, color = id)) + 
+  geom_point() + 
+  geom_line() +
+  theme(legend.position = "none")
+ggplot(pbc2[c('id','prothrombin','year')], aes(year, prothrombin, group = id, color = id)) + 
+  geom_point() + 
+  geom_line() +
+  theme(legend.position = "none")
+ggplot(pbc2[c('id','histologic','year')], aes(year, histologic, group = id, color = id)) + 
+  geom_point() + 
+  geom_line() +
+  theme(legend.position = "none")
+```
+
