@@ -19,6 +19,9 @@ library(data.table)
 library(joineRML)
 library(tidyr)
 library(MASS)
+library(car)
+library(mice)
+library(zoo)
 ```
 
 
@@ -137,12 +140,43 @@ cox_select <- stepAIC(coxph(Surv(year,status2)~drug + age + sex + ascites + hepa
 cox_select
 ```
 
-##b)
 ```{r}
-#
+#confidence intervals for the selected model
 sum_cox_select <- summary(cox_select)
 sum_cox_select$conf.int
 ```
+```{r}
+#local test of significance of spiders
+linearHypothesis(cox_select, c("spidersYes"))
+```
+```{r}
+#see practice session n°2, exercise 2, question 5 (timecode of recording 1h25min)
+
+fitYes <- survfit(coxph(Surv(year, status2) ~ drug + age + sex + ascites + hepatomegaly + spiders + edema + serBilir + serChol + albumin + alkaline + SGOT,
+              data = subset(pbc2, spiders =='Yes')))
+fitNo <- survfit(coxph(Surv(year, status2) ~ drug + age + sex + ascites + hepatomegaly + spiders + edema + serBilir + serChol + albumin + alkaline + SGOT,
+              data = subset(pbc2, spiders =='No')))
+
+cumhaz <- data.frame(time = cbind(max(fitYes$time[1],fitNo$time[1]):max(fitYes$time[-1],fitNo$time[-1])))
+
+cumhazYes <- data.frame(time = fitYes$time, cumhaz = fitYes$cumhaz)
+cumhazNo <- data.frame(time = fitNo$time, cumhaz = fitNo$cumhaz)
+
+cumhazYes$time[cumhazYes$time<=max(fitYes$time[1], fitNo$time[1])] = max(fitYes$time[1], fitNo$time[1])
+cumhazNo$time[cumhazNo$time<=max(fitYes$time[1], fitNo$time[1])] = max(fitYes$time[1], fitNo$time[1])
+
+cumhaz$chSpidersYes <- cumhazYes$cumhaz[na.locf(match(cumhaz$time,cumhazYes$time))]
+cumhaz$chSpidersNo <- cumhazNo$cumhaz[na.locf(match(cumhaz$time,cumhazNo$time))]
+```
+
+
+```{r}
+attach(cumhaz)
+plot(time, chSpidersYes, type = "s", ylab = "cumulative hazard", xlab = "time")
+lines(time, chSpidersNo, type = "s", lty= 2)
+legend
+```
+
 
 (1) Dickson ER, Grambsch PM, Fleming TR, Fisher LD, Langworthy A. Prognosis in primary biliary cirrhosis: model for decision making. Hepatology. 1989 Jul;10(1):1-7. doi: 10.1002/hep.1840100102. PMID: 2737595.
 
