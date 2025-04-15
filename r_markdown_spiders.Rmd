@@ -151,20 +151,18 @@ linearHypothesis(cox_select, c("spidersYes"))
 ```
 ```{r}
 #see practice session n°2, exercise 2, question 5 (timecode of recording 1h25min)
-
+#first those fit are the estimates of the survival curves on subsets depending on our binary variable spiders
 fitYes <- survfit(coxph(Surv(year, status2) ~ drug + age + sex + ascites + hepatomegaly + spiders + edema + serBilir + serChol + albumin + alkaline + SGOT,
               data = subset(pbc2, spiders =='Yes')))
 fitNo <- survfit(coxph(Surv(year, status2) ~ drug + age + sex + ascites + hepatomegaly + spiders + edema + serBilir + serChol + albumin + alkaline + SGOT,
               data = subset(pbc2, spiders =='No')))
 
-cumhaz <- data.frame(time = cbind(max(fitYes$time[1],fitNo$time[1]):max(fitYes$time[-1],fitNo$time[-1])))
+#surfit fuction provides values only at times of observations, which are different for the two subsets, so we build a time scale with all time points
+cumhaz <- data.frame(time = sort(c(fitYes$time, fitNo$time)))
 
 cumhazYes <- data.frame(time = fitYes$time, cumhaz = fitYes$cumhaz)
 cumhazNo <- data.frame(time = fitNo$time, cumhaz = fitNo$cumhaz)
-
-cumhazYes$time[cumhazYes$time<=max(fitYes$time[1], fitNo$time[1])] = max(fitYes$time[1], fitNo$time[1])
-cumhazNo$time[cumhazNo$time<=max(fitYes$time[1], fitNo$time[1])] = max(fitYes$time[1], fitNo$time[1])
-
+#on unobserved times, the last observation is carried forward
 cumhaz$chSpidersYes <- cumhazYes$cumhaz[na.locf(match(cumhaz$time,cumhazYes$time))]
 cumhaz$chSpidersNo <- cumhazNo$cumhaz[na.locf(match(cumhaz$time,cumhazNo$time))]
 ```
@@ -172,8 +170,19 @@ cumhaz$chSpidersNo <- cumhazNo$cumhaz[na.locf(match(cumhaz$time,cumhazNo$time))]
 
 ```{r}
 attach(cumhaz)
+
 plot(time, chSpidersYes, type = "s", ylab = "cumulative hazard", xlab = "time")
 lines(time, chSpidersNo, type = "s", lty= 2)
+legend
+
+plot(time, log(chSpidersYes), type = "s", ylab = "log(cumulative hazard)", xlab = "time")
+lines(time, log(chSpidersNo), type = "s", lty= 2)
+legend
+
+plot(time, log(chSpidersYes) - log(chSpidersNo), type = "s", ylab = "log(ratio cumulative hazard)", xlab = "time")
+legend
+
+plot(chSpidersNo, chSpidersYes, type = "s", ylab = "cumulative hazard spiders=Yes", xlab = "cumulative hazard spiders=No")
 legend
 ```
 
