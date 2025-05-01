@@ -185,6 +185,38 @@ legend
 plot(chSpidersNo, chSpidersYes, type = "s", ylab = "cumulative hazard spiders=Yes", xlab = "cumulative hazard spiders=No")
 legend
 ```
+##b) Parametric regression models
+```{r}
+#we fit the models on year>0 because survreg doesn't allow a time of event being 0 or negative
+#see exercise session 2 recording at 2:19:30
+fit_weibull <- survreg(Surv(year, status2)~ drug + age + sex + ascites + hepatomegaly + spiders + edema + serBilir + serChol + albumin + alkaline + SGOT,
+        data = subset(pbc2, year>0),
+        dist = 'weibull')
+fit_exp <- survreg(Surv(year, status2)~ drug + age + sex + ascites + hepatomegaly + spiders + edema + serBilir + serChol + albumin + alkaline + SGOT,
+        data = subset(pbc2, year>0),
+        dist = 'exponential')
+fit_loglog <- survreg(Surv(year, status2)~ drug + age + sex + ascites + hepatomegaly + spiders + edema + serBilir + serChol + albumin + alkaline + SGOT,
+        data = subset(pbc2, year>0),
+        dist = 'loglogistic')
+fit_lognorm <- survreg(Surv(year, status2)~ drug + age + sex + ascites + hepatomegaly + spiders + edema + serBilir + serChol + albumin + alkaline + SGOT,
+        data = subset(pbc2, year>0),
+        dist = 'lognormal')
+```
+
+```{r}
+#Model selection on AIC criteria
+AIC <- c(extractAIC(fit_weibull)[2],extractAIC(fit_exp)[2],extractAIC(fit_loglog)[2],extractAIC(fit_lognorm)[2])
+names(AIC) <- c('weibul','exponential', 'loglogistic', 'lognormal')
+AIC
+#lowest AIC is weibul, so it should be the one selected
+```
+```{r}
+#specifications of selected model:
+summary(fit_weibull)
+```
+
+
+
 
 
 (1) Dickson ER, Grambsch PM, Fleming TR, Fisher LD, Langworthy A. Prognosis in primary biliary cirrhosis: model for decision making. Hepatology. 1989 Jul;10(1):1-7. doi: 10.1002/hep.1840100102. PMID: 2737595.
