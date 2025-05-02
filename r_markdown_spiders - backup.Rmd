@@ -106,7 +106,7 @@ ggplot(pbc2[c('id','prothrombin','year')], aes(year, prothrombin, group = id, co
 ##a)
 
 ```{r}
-surv_spiders <- survfit(Surv(years,status2)~spiders, data=pbc2)
+surv_spiders <- survfit(Surv(year,status2)~spiders, data=pbc2)
 summary(surv_spiders)
 ggsurvplot(surv_spiders)
 ```
@@ -119,22 +119,22 @@ quantile(surv_spiders, prob=0.75)
 ```
 ##c)
 ```{r}
-survdiff(Surv(years,status2)~spiders, data=pbc2) #log ranks
-survdiff(Surv(years,status2)~spiders, data=pbc2, rho=1) #peto-peto weights
+survdiff(Surv(year,status2)~spiders, data=pbc2) #log ranks
+survdiff(Surv(year,status2)~spiders, data=pbc2, rho=1) #peto-peto weights
 ```
 
 ##d)
 ```{r}
-cox_spiders <- coxph(Surv(years,status2)~spiders, data=pbc2)
+cox_spiders <- coxph(Surv(year,status2)~spiders, data=pbc2)
 summary(cox_spiders)
 ```
 ###PART C
 ##a)
 ```{r}
-cox_all <- coxph(Surv(years,status2)~drug + age + sex + ascites + hepatomegaly + spiders + edema + serBilir + serChol + albumin + alkaline + SGOT + platelets + prothrombin, data = pbc2)
+cox_all <- coxph(Surv(year,status2)~drug + age + sex + ascites + hepatomegaly + spiders + edema + serBilir + serChol + albumin + alkaline + SGOT + platelets + prothrombin, data = pbc2)
 cox_all
 pbc2_no_na <- na.omit(pbc2)
-cox_select <- stepAIC(coxph(Surv(years,status2)~drug + age + sex + ascites + hepatomegaly + spiders + edema + serBilir + serChol + albumin + alkaline + SGOT + platelets + prothrombin, data = pbc2_no_na),
+cox_select <- stepAIC(coxph(Surv(year,status2)~drug + age + sex + ascites + hepatomegaly + spiders + edema + serBilir + serChol + albumin + alkaline + SGOT + platelets + prothrombin, data = pbc2_no_na),
         scope = list(upper = ~., lower= ~spiders), 
         direction = 'both')
 cox_select
@@ -152,9 +152,9 @@ linearHypothesis(cox_select, c("spidersYes"))
 ```{r}
 #see practice session n°2, exercise 2, question 5 (timecode of recording 1h25min)
 #first those fit are the estimates of the survival curves on subsets depending on our binary variable spiders
-fitYes <- survfit(coxph(Surv(years, status2) ~ drug + age + sex + ascites + hepatomegaly + spiders + edema + serBilir + serChol + albumin + alkaline + SGOT,
+fitYes <- survfit(coxph(Surv(year, status2) ~ drug + age + sex + ascites + hepatomegaly + spiders + edema + serBilir + serChol + albumin + alkaline + SGOT,
               data = subset(pbc2, spiders =='Yes')))
-fitNo <- survfit(coxph(Surv(years, status2) ~ drug + age + sex + ascites + hepatomegaly + spiders + edema + serBilir + serChol + albumin + alkaline + SGOT,
+fitNo <- survfit(coxph(Surv(year, status2) ~ drug + age + sex + ascites + hepatomegaly + spiders + edema + serBilir + serChol + albumin + alkaline + SGOT,
               data = subset(pbc2, spiders =='No')))
 
 #surfit fuction provides values only at times of observations, which are different for the two subsets, so we build a time scale with all time points
@@ -163,8 +163,8 @@ cumhaz <- data.frame(time = sort(c(fitYes$time, fitNo$time)))
 cumhazYes <- data.frame(time = fitYes$time, cumhaz = fitYes$cumhaz)
 cumhazNo <- data.frame(time = fitNo$time, cumhaz = fitNo$cumhaz)
 #on unobserved times, the last observation is carried forward
-cumhaz$chSpidersYes <- cumhazYes$cumhaz[na.locf(match(cumhaz$time,cumhazYes$time), na.rm = FALSE)]
-cumhaz$chSpidersNo <- cumhazNo$cumhaz[na.locf(match(cumhaz$time,cumhazNo$time), na.rm = FALSE)]
+cumhaz$chSpidersYes <- cumhazYes$cumhaz[na.locf(match(cumhaz$time,cumhazYes$time))]
+cumhaz$chSpidersNo <- cumhazNo$cumhaz[na.locf(match(cumhaz$time,cumhazNo$time))]
 ```
 
 
@@ -183,18 +183,19 @@ plot(chSpidersNo, chSpidersYes, type = "s", ylab = "cumulative hazard spiders=Ye
 ```
 ##b) Parametric regression models
 ```{r}
+#we fit the models on year>0 because survreg doesn't allow a time of event being 0 or negative
 #see exercise session 2 recording at 2:19:30
-fit_weibull <- survreg(Surv(years, status2)~ drug + age + sex + ascites + hepatomegaly + spiders + edema + serBilir + serChol + albumin + alkaline + SGOT,
-        data = pbc2,
+fit_weibull <- survreg(Surv(year, status2)~ drug + age + sex + ascites + hepatomegaly + spiders + edema + serBilir + serChol + albumin + alkaline + SGOT,
+        data = subset(pbc2, year>0),
         dist = 'weibull')
-fit_exp <- survreg(Surv(years, status2)~ drug + age + sex + ascites + hepatomegaly + spiders + edema + serBilir + serChol + albumin + alkaline + SGOT,
-        data = pbc2,
+fit_exp <- survreg(Surv(year, status2)~ drug + age + sex + ascites + hepatomegaly + spiders + edema + serBilir + serChol + albumin + alkaline + SGOT,
+        data = subset(pbc2, year>0),
         dist = 'exponential')
-fit_loglog <- survreg(Surv(years, status2)~ drug + age + sex + ascites + hepatomegaly + spiders + edema + serBilir + serChol + albumin + alkaline + SGOT,
-        data = pbc2,
+fit_loglog <- survreg(Surv(year, status2)~ drug + age + sex + ascites + hepatomegaly + spiders + edema + serBilir + serChol + albumin + alkaline + SGOT,
+        data = subset(pbc2, year>0),
         dist = 'loglogistic')
-fit_lognorm <- survreg(Surv(years, status2)~ drug + age + sex + ascites + hepatomegaly + spiders + edema + serBilir + serChol + albumin + alkaline + SGOT,
-        data = pbc2,
+fit_lognorm <- survreg(Surv(year, status2)~ drug + age + sex + ascites + hepatomegaly + spiders + edema + serBilir + serChol + albumin + alkaline + SGOT,
+        data = subset(pbc2, year>0),
         dist = 'lognormal')
 ```
 
