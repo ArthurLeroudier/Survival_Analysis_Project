@@ -203,11 +203,11 @@ fit_lognorm <- survreg(Surv(years, status2)~ drug + age + sex + ascites + hepato
 AIC <- c(extractAIC(fit_weibull)[2],extractAIC(fit_exp)[2],extractAIC(fit_loglog)[2],extractAIC(fit_lognorm)[2])
 names(AIC) <- c('weibul','exponential', 'loglogistic', 'lognormal')
 AIC
-#lowest AIC is weibul, so it should be the one selected
+#lowest AIC is loglogistic, so it should be the one selected
 ```
 ```{r}
 #specifications of selected model
-summary(fit_weibull)
+summary(fit_loglog)
 ```
 
 
