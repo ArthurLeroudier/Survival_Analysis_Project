@@ -13,15 +13,18 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r}
 library(KMsurv)
 library(survival)
+library(graphics)
 library(ggplot2)
 library(survminer)
+library(survival)
 library(data.table)
 library(joineRML)
 library(tidyr)
-library(MASS)
-library(car)
+library(dplyr)
+library(purrr)
 library(mice)
 library(zoo)
+library(MASS) 
 ```
 
 
@@ -101,12 +104,57 @@ ggplot(pbc2[c('id','prothrombin','year')], aes(year, prothrombin, group = id, co
   geom_line() +
   theme(legend.position = "none")
 ```
+```{r}
+#HANDLING MISSING VALUES
+# Step 1: Remove serChol
+pbc2_locf <- pbc2 %>%
+  select(-serChol)
+
+# Step 2: Identify variables to impute (exclude id and year)
+vars_to_impute <- setdiff(names(pbc2_locf), c("id", "year"))
+
+# Step 3: Apply LOCF imputation grouped by patient ID
+pbc2_locf <- pbc2_locf %>%
+  arrange(id, year) %>%
+  group_by(id) %>%
+  mutate(across(all_of(vars_to_impute), ~ na.locf(.x, na.rm = FALSE))) %>%
+  ungroup()
+
+colSums(is.na(pbc2_locf))
+
+sum(is.na(pbc2_locf$platelets)) 
+pbc2_locf %>% filter(is.na(platelets)) %>% select(id, year)
+
+# For these 4 observation a median imputation grou[ed by sex and drug group 
+baseline <- pbc2_locf %>% filter(year == 0)
+
+# Step 2: Compute median platelets per drug × sex group (excluding NAs)
+median_by_group <- baseline %>%
+  filter(!is.na(platelets)) %>%
+  group_by(drug, sex) %>%
+  summarise(median_platelets = median(platelets), .groups = "drop")
+
+# Step 3: Join and impute missing baseline values
+baseline_imputed <- baseline %>%
+  left_join(median_by_group, by = c("drug", "sex")) %>%
+  mutate(platelets = if_else(is.na(platelets), median_platelets, platelets)) %>%
+  select(-median_platelets)
+
+# Step 4: Replace the original baseline data in the full dataset
+pbc2_filled <- pbc2_locf %>%
+  filter(year > 0) %>%
+  bind_rows(baseline_imputed) %>%
+  arrange(id, year)
+
+sum(is.na(pbc2_filled$platelets))  # should be 0
+```
+
 
 ###PART B
 ##a)
 
 ```{r}
-surv_spiders <- survfit(Surv(years,status2)~spiders, data=pbc2)
+surv_spiders <- survfit(Surv(years,status2)~spiders, data=pbc2_filled)
 summary(surv_spiders)
 ggsurvplot(surv_spiders)
 ```
@@ -119,22 +167,22 @@ quantile(surv_spiders, prob=0.75)
 ```
 ##c)
 ```{r}
-survdiff(Surv(years,status2)~spiders, data=pbc2) #log ranks
-survdiff(Surv(years,status2)~spiders, data=pbc2, rho=1) #peto-peto weights
+survdiff(Surv(years,status2)~spiders, data=pbc2_filled) #log ranks
+survdiff(Surv(years,status2)~spiders, data=pbc2_filled, rho=1) #peto-peto weights
 ```
 
 ##d)
 ```{r}
-cox_spiders <- coxph(Surv(years,status2)~spiders, data=pbc2)
+cox_spiders <- coxph(Surv(years,status2)~spiders, data=pbc2_filled)
 summary(cox_spiders)
 ```
 ###PART C
 ##a)
+
 ```{r}
-cox_all <- coxph(Surv(years,status2)~drug + age + sex + ascites + hepatomegaly + spiders + edema + serBilir + serChol + albumin + alkaline + SGOT + platelets + prothrombin, data = pbc2)
+cox_all <- coxph(Surv(years,status2)~drug + age + sex + ascites + hepatomegaly + spiders + edema + serBilir + albumin + alkaline + SGOT + platelets + prothrombin, data = pbc2_filled)
 cox_all
-pbc2_no_na <- na.omit(pbc2)
-cox_select <- stepAIC(coxph(Surv(years,status2)~drug + age + sex + ascites + hepatomegaly + spiders + edema + serBilir + serChol + albumin + alkaline + SGOT + platelets + prothrombin, data = pbc2_no_na),
+cox_select <- stepAIC(coxph(Surv(years,status2)~drug + age + sex + ascites + hepatomegaly + spiders + edema + serBilir + albumin + alkaline + SGOT + platelets + prothrombin, data = pbc2_filled),
         scope = list(upper = ~., lower= ~spiders), 
         direction = 'both')
 cox_select
@@ -152,10 +200,10 @@ linearHypothesis(cox_select, c("spidersYes"))
 ```{r}
 #see practice session n°2, exercise 2, question 5 (timecode of recording 1h25min)
 #first those fit are the estimates of the survival curves on subsets depending on our binary variable spiders
-fitYes <- survfit(coxph(Surv(years, status2) ~ drug + age + sex + ascites + hepatomegaly + spiders + edema + serBilir + serChol + albumin + alkaline + SGOT,
-              data = subset(pbc2, spiders =='Yes')))
-fitNo <- survfit(coxph(Surv(years, status2) ~ drug + age + sex + ascites + hepatomegaly + spiders + edema + serBilir + serChol + albumin + alkaline + SGOT,
-              data = subset(pbc2, spiders =='No')))
+fitYes <- survfit(coxph(Surv(years, status2) ~ drug + age + sex + ascites + hepatomegaly + spiders + edema + serBilir + albumin + alkaline + SGOT,
+              data = subset(pbc2_filled, spiders =='Yes')))
+fitNo <- survfit(coxph(Surv(years, status2) ~ drug + age + sex + ascites + hepatomegaly + spiders + edema + serBilir + albumin + alkaline + SGOT,
+              data = subset(pbc2_filled, spiders =='No')))
 
 #surfit fuction provides values only at times of observations, which are different for the two subsets, so we build a time scale with all time points
 cumhaz <- data.frame(time = sort(c(fitYes$time, fitNo$time)))
@@ -171,29 +219,123 @@ cumhaz$chSpidersNo <- cumhazNo$cumhaz[na.locf(match(cumhaz$time,cumhazNo$time), 
 ```{r}
 attach(cumhaz)
 
-plot(time, chSpidersYes, type = "s", ylab = "cumulative hazard", xlab = "time")
-lines(time, chSpidersNo, type = "s", lty= 2)
+plot(time, chSpidersYes, type = "s", ylab = "Cumulative hazards", xlab = "Time", col='red')
+lines(time, chSpidersNo, type = "s", lty= 2, col = 'darkgreen')
+legend(x=10, y = 0.1, legend = c("Spiders = Yes", "Spiders = No"), col = c("darkgreen", 'red'), lty = c(2,1))
 
-plot(time, log(chSpidersYes), type = "s", ylab = "log(cumulative hazard)", xlab = "time")
-lines(time, log(chSpidersNo), type = "s", lty= 2)
+plot(time, log(chSpidersYes), type = "s", ylab = "log(cumulative hazards)", xlab = "Time", col = 'red')
+lines(time, log(chSpidersNo), type = "s", lty= 2, 'col' = 'darkgreen')
+legend(x=10, y = -5, legend = c("Spiders = Yes", "Spiders = No"), col = c("darkgreen", 'red'), lty = c(2,1))
 
-plot(time, log(chSpidersYes) - log(chSpidersNo), type = "s", ylab = "log(ratio cumulative hazard)", xlab = "time")
+plot(time, log(chSpidersYes) - log(chSpidersNo), type = "s", ylab = "log(ratio cumulative hazard)", xlab = "Time")
 
-plot(chSpidersNo, chSpidersYes, type = "s", ylab = "cumulative hazard spiders=Yes", xlab = "cumulative hazard spiders=No")
+plot(chSpidersNo, chSpidersYes, type = "s", ylab = "Cumulative hazard for spiders=Yes", xlab = "Cumulative hazard for spiders=No")
 ```
+
+```{r}
+fitMen <- survfit(coxph(Surv(years, status2) ~ drug + age + sex + ascites + hepatomegaly + spiders + edema + serBilir + albumin + alkaline + SGOT,
+              data = subset(pbc2_filled, sex =='male')))
+fitWomen <- survfit(coxph(Surv(years, status2) ~ drug + age + sex + ascites + hepatomegaly + spiders + edema + serBilir + albumin + alkaline + SGOT,
+              data = subset(pbc2_filled, sex =='female')))
+
+#surfit fuction provides values only at times of observations, which are different for the two subsets, so we build a time scale with all time points
+cumhazSex <- data.frame(time = sort(c(fitMen$time, fitWomen$time)))
+
+cumhazMen <- data.frame(time = fitMen$time, cumhazSex = fitMen$cumhaz)
+cumhazWomen <- data.frame(time = fitWomen$time, cumhazSex = fitWomen$cumhaz)
+#on unobserved times, the last observation is carried forward
+cumhazSex$chMen <- cumhazMen$cumhazSex[na.locf(match(cumhazSex$time,cumhazMen$time), na.rm = FALSE)]
+cumhazSex$chWomen <- cumhazWomen$cumhazSex[na.locf(match(cumhazSex$time,cumhazWomen$time), na.rm = FALSE)]
+attach(cumhazSex)
+
+plot(time, chMen, type = "s", ylab = "Cumulative hazards", xlab = "Time", col='red')
+lines(time, chWomen, type = "s", lty= 2, col = 'darkgreen')
+legend(x=0, y = 1.5, legend = c("Men", "Women"), col = c("darkgreen", 'red'), lty = c(2,1))
+
+plot(time, log(chMen), type = "s", ylab = "log(cumulative hazards)", xlab = "Time", col = 'red')
+lines(time, log(chWomen), type = "s", lty= 2, 'col' = 'darkgreen')
+legend(x=10, y = -4, legend = c("Men", "Women"), col = c("darkgreen", 'red'), lty = c(2,1))
+
+plot(time, log(chMen) - log(chWomen), type = "s", ylab = "log(ratio cumulative hazard)", xlab = "Time")
+
+plot(chMen, chWomen, type = "s", ylab = "Cumulative hazard for men", xlab = "Cumulative hazard for women")
+```
+
+```{r}
+#diagnostic plots for ascites
+fitYes <- survfit(coxph(Surv(years, status2) ~ drug + age + sex + spiders + hepatomegaly + ascites + edema + serBilir + albumin + alkaline + SGOT,
+                        data = subset(pbc2_filled, ascites =='Yes')))
+fitNo <- survfit(coxph(Surv(years, status2) ~ drug + age + sex + spiders + hepatomegaly + ascites + edema + serBilir + albumin + alkaline + SGOT,
+                       data = subset(pbc2_filled, ascites =='No')))
+
+#surfit fuction provides values only at times of observations, which are different for the two subsets, so we build a time scale with all time points
+cumhaz <- data.frame(time = sort(c(fitYes$time, fitNo$time)))
+
+cumhazYes <- data.frame(time = fitYes$time, cumhaz = fitYes$cumhaz)
+cumhazNo <- data.frame(time = fitNo$time, cumhaz = fitNo$cumhaz)
+#on unobserved times, the last observation is carried forward
+cumhaz$chAscitesYes <- cumhazYes$cumhaz[na.locf(match(cumhaz$time,cumhazYes$time), na.rm = FALSE)]
+cumhaz$chAscitesNo <- cumhazNo$cumhaz[na.locf(match(cumhaz$time,cumhazNo$time), na.rm = FALSE)]
+
+attach(cumhaz)
+
+plot(time, chAscitesYes, type = "s", ylab = "Cumulative hazards", xlab = "Time", col='red')
+lines(time, chAscitesNo, type = "s", lty= 2, col = 'darkgreen')
+legend(x=1, y = 1.2, legend = c("Ascites = Yes", "Ascites = No"), col = c("darkgreen", 'red'), lty = c(2,1))
+
+plot(time, log(chAscitesYes), type = "s", ylab = "log(cumulative hazards)", xlab = "Time", col = 'red')
+lines(time, log(chAscitesNo), type = "s", lty= 2, 'col' = 'darkgreen')
+legend(x=10, y = -4, legend = c("Ascites = Yes", "Ascites = No"), col = c("darkgreen", 'red'), lty = c(2,1))
+
+plot(time, log(chAscitesYes) - log(chAscitesNo), type = "s", ylab = "log(ratio cumulative hazard)", xlab = "Time")
+
+plot(chAscitesNo, chAscitesYes, type = "s", ylab = "Cumulative hazard for ascites=Yes", xlab = "Cumulative hazard for ascites=No")
+```
+
+```{r}
+fitYes <- survfit(coxph(Surv(years, status2) ~ drug + age + sex + spiders + hepatomegaly + ascites + edema + serBilir + albumin + alkaline + SGOT,
+                        data = subset(pbc2_filled, hepatomegaly =='Yes')))
+fitNo <- survfit(coxph(Surv(years, status2) ~ drug + age + sex + spiders + hepatomegaly + ascites + edema + serBilir + albumin + alkaline + SGOT,
+                       data = subset(pbc2_filled, hepatomegaly =='No')))
+
+#surfit fuction provides values only at times of observations, which are different for the two subsets, so we build a time scale with all time points
+cumhaz <- data.frame(time = sort(c(fitYes$time, fitNo$time)))
+
+cumhazYes <- data.frame(time = fitYes$time, cumhaz = fitYes$cumhaz)
+cumhazNo <- data.frame(time = fitNo$time, cumhaz = fitNo$cumhaz)
+#on unobserved times, the last observation is carried forward
+cumhaz$chHepatomegalyYes <- cumhazYes$cumhaz[na.locf(match(cumhaz$time,cumhazYes$time), na.rm = FALSE)]
+cumhaz$chHepatomegalyNo <- cumhazNo$cumhaz[na.locf(match(cumhaz$time,cumhazNo$time), na.rm = FALSE)]
+
+attach(cumhaz)
+
+plot(time, chHepatomegalyYes, type = "s", ylab = "Cumulative hazards", xlab = "Time", col='red')
+lines(time, chHepatomegalyNo, type = "s", lty= 2, col = 'darkgreen')
+legend(x=1, y = 1.1, legend = c("Hepatomegaly = Yes", "Hepatomegaly = No"), col = c("darkgreen", 'red'), lty = c(2,1))
+
+plot(time, log(chHepatomegalyYes), type = "s", ylab = "log(cumulative hazards)", xlab = "Time", col = 'red')
+lines(time, log(chHepatomegalyNo), type = "s", lty= 2, 'col' = 'darkgreen')
+legend(x=7, y = -5, legend = c("Hepatomegaly = Yes", "Hepatomegaly = No"), col = c("darkgreen", 'red'), lty = c(2,1))
+
+plot(time, log(chHepatomegalyYes) - log(chHepatomegalyNo), type = "s", ylab = "log(ratio cumulative hazard)", xlab = "Time")
+
+plot(chHepatomegalyNo, chHepatomegalyYes, type = "s", ylab = "Cumulative hazard for hepatomegaly=Yes", xlab = "Cumulative hazard for hepatomegaly=No")
+```
+
+
 ##b) Parametric regression models
 ```{r}
 #see exercise session 2 recording at 2:19:30
-fit_weibull <- survreg(Surv(years, status2)~ drug + age + sex + ascites + hepatomegaly + spiders + edema + serBilir + serChol + albumin + alkaline + SGOT,
+fit_weibull <- survreg(Surv(years, status2)~ drug + age + sex + ascites + hepatomegaly + spiders + edema + serBilir + albumin + alkaline + SGOT,
         data = pbc2,
         dist = 'weibull')
-fit_exp <- survreg(Surv(years, status2)~ drug + age + sex + ascites + hepatomegaly + spiders + edema + serBilir + serChol + albumin + alkaline + SGOT,
+fit_exp <- survreg(Surv(years, status2)~ drug + age + sex + ascites + hepatomegaly + spiders + edema + serBilir + albumin + alkaline + SGOT,
         data = pbc2,
         dist = 'exponential')
-fit_loglog <- survreg(Surv(years, status2)~ drug + age + sex + ascites + hepatomegaly + spiders + edema + serBilir + serChol + albumin + alkaline + SGOT,
+fit_loglog <- survreg(Surv(years, status2)~ drug + age + sex + ascites + hepatomegaly + spiders + edema + serBilir + albumin + alkaline + SGOT,
         data = pbc2,
         dist = 'loglogistic')
-fit_lognorm <- survreg(Surv(years, status2)~ drug + age + sex + ascites + hepatomegaly + spiders + edema + serBilir + serChol + albumin + alkaline + SGOT,
+fit_lognorm <- survreg(Surv(years, status2)~ drug + age + sex + ascites + hepatomegaly + spiders + edema + serBilir + albumin + alkaline + SGOT,
         data = pbc2,
         dist = 'lognormal')
 ```
